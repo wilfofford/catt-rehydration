@@ -12,8 +12,8 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct SemCtx<S: Position, T: Clone> {
-    map: S::Container<TermN<T>>,
-    ty: TypeN<T>,
+    pub(crate) map: S::Container<TermN<T>>,
+    pub(crate) ty: TypeN<T>,
 }
 
 impl<S: Position, T: Clone> SemCtx<S, T> {

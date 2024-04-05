@@ -117,7 +117,7 @@ pub enum Command {
     AssertEq(CtxE<Range<usize>>, TermE<Range<usize>>, TermE<Range<usize>>),
     Size(CtxE<Range<usize>>, TermE<Range<usize>>),
     Import(PathBuf, Range<usize>),
-    UcTerm(Ctx<Range<usize>>, Term<Range<usize>>),
+    UcTerm(CtxE<Range<usize>>, TermE<Range<usize>>),
 }
 
 pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
@@ -323,40 +323,40 @@ impl Command {
             }
             Command::Size(ctx, tm) => {
                 println!("{} {} {tm}", "[=^.^=]".fg(Color::Green), "Normalising".fg(Color::Green));
-                        let local = ctx.check(env)?;
-                        macro_rules! get_size {
-                            ($l:expr) => {
-                                let (tmt, _) = tm.check(env, &$l)?;
-                                let sem_ctx = $l.ctx.id_sem_ctx();
-                                let tmn = tmt.eval(&sem_ctx, env);
-                                println!(
-                                    "{}",
-                                    RcDoc::group(
-                                        RcDoc::text("Term:".fg(Color::Blue).to_string())
+                let local = ctx.check(env)?;
+                macro_rules! get_size {
+                    ($l:expr) => {
+                        let (tmt, _) = tm.check(env, &$l)?;
+                        let sem_ctx = $l.ctx.id_sem_ctx();
+                        let tmn = tmt.eval(&sem_ctx, env);
+                        println!(
+                            "{}",
+                            RcDoc::group(
+                                RcDoc::text("Term:".fg(Color::Blue).to_string())
+                                    .append(
+                                        RcDoc::line()
                                             .append(
-                                                RcDoc::line()
-                                                    .append(
-                                                        tm.to_doc()
-                                                    )
-                                                    .nest(2)
+                                                tm.to_doc()
                                             )
-                                            .append(RcDoc::line())
-                                            .append(RcDoc::group(
-                                                RcDoc::text(format!("{} {}", "has size:".fg(Color::Blue), tmn.size()))
-                                            ))
+                                            .nest(2)
                                     )
-                                    .pretty(80)
-                                );
-                            };
-                        }
-                        match local {
-                            Either::Left(local) => {
-                                get_size!(local);
-                            }
-                            Either::Right(local) => {
-                                get_size!(local);
-                            }
-                        }
+                                    .append(RcDoc::line())
+                                    .append(RcDoc::group(
+                                        RcDoc::text(format!("{} {}", "has size:".fg(Color::Blue), tmn.size()))
+                                    ))
+                            )
+                            .pretty(80)
+                        );
+                    };
+                }
+                match local {
+                    Either::Left(local) => {
+                        get_size!(local);
+                    }
+                    Either::Right(local) => {
+                        get_size!(local);
+                    }
+                }
             }
             Command::AssertEq(ctx, tm1, tm2) => {
                 println!(
