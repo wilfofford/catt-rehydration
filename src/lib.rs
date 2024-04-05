@@ -6,3 +6,4 @@ pub mod parsing;
 pub mod syntax;
 pub mod term;
 pub mod typecheck;
+pub mod covers;

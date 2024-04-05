@@ -70,7 +70,7 @@ where
 
 pub(crate) fn ident() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
     text::ident().try_map(|x, span| {
-        if x == "coh" || x == "comp" || x == "id" || x == "def" || x == "_" {
+        if x == "coh" || x == "comp" || x == "id" || x == "def" || x == "_" || x == "uc_term" {
             Err(Simple::custom(
                 span,
                 format!("Identifier cannot be \"{x}\""),

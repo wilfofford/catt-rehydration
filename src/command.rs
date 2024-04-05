@@ -49,6 +49,8 @@ where
     Report(Vec<Report<'static, (Id, Range<usize>)>>),
     #[error("Assertion failed: Terms \"{}\" and \"{}\" are not equal", .0.fg(Color::Red), .1.fg(Color::Red))]
     Assertion(TermE<Range<usize>>, TermE<Range<usize>>, Range<usize>),
+    #[error("Universal covers not defined for terms of dimension {}", .0)]
+    Cover(usize, Range<usize>),
 }
 
 impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
@@ -86,6 +88,17 @@ impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
                     .finish();
                 vec![report]
             }
+            CattError::Cover(_, sp) => {
+                let report = Report::build(ReportKind::Error, src.clone(), sp.start())
+                    .with_message(message)
+                    .with_label(
+                        ariadne::Label::new((src.clone(), sp))
+                            .with_message("Wrong dimension")
+                            .with_color(Color::Red),
+                    )
+                    .finish();
+                vec![report]
+            }
         }
     }
 }
@@ -104,6 +117,7 @@ pub enum Command {
     AssertEq(CtxE<Range<usize>>, TermE<Range<usize>>, TermE<Range<usize>>),
     Size(CtxE<Range<usize>>, TermE<Range<usize>>),
     Import(PathBuf, Range<usize>),
+    UcTerm(Ctx<Range<usize>>, Term<Range<usize>>),
 }
 
 pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
@@ -176,7 +190,7 @@ impl Command {
         }
         match self {
             Command::DefHead(nm, h) => {
-                println!("{} {nm}", "Inferring".fg(Color::Green));
+                println!("{} {} {nm}", "[=^.^=]".fg(Color::Green), "Inferring".fg(Color::Green));
                 let res = h.infer(env)?;
                 match &res {
                     Either::Left(r) => {
@@ -189,7 +203,7 @@ impl Command {
                 env.top_level.insert(nm, res);
             }
             Command::DefCtx(nm, ctx, tm) => {
-                println!("{} {nm}", "Checking".fg(Color::Green));
+                println!("{} {} {nm}", "[=^.^=]".fg(Color::Green), "Checking".fg(Color::Green));
                 let local = ctx.check(env)?;
                 match local {
                     Either::Left(local) => {
@@ -222,7 +236,7 @@ impl Command {
             }
             Command::DefWT(nm, ctx, ty, tm) => {
                 println!(
-                    "{} {nm}\n{} {}",
+                    "{} {} {nm}\n{} {}", "[=^.^=]".fg(Color::Green),
                     "Checking".fg(Color::Green),
                     "has type".fg(Color::Blue),
                     ty.to_doc().nest(9).pretty(80)
@@ -259,7 +273,7 @@ impl Command {
                 }
             }
             Command::Normalise(ctx, tm) => {
-                println!("{} {tm}", "Normalising".fg(Color::Green));
+                println!("{} {} {tm}", "[=^.^=]".fg(Color::Green), "Normalising".fg(Color::Green));
                 let local = ctx.check(env)?;
                 macro_rules! normalise {
                     ($l:expr) => {
@@ -308,41 +322,45 @@ impl Command {
                 }
             }
             Command::Size(ctx, tm) => {
-                println!("{} {tm}", "Normalising".fg(Color::Green));
-                let local = ctx.check(env)?;
-                macro_rules! get_size {
-                    ($l:expr) => {
-                        let (tmt, _) = tm.check(env, &$l)?;
-                        let sem_ctx = $l.ctx.id_sem_ctx();
-                        let tmn = tmt.eval(&sem_ctx, env);
-                        println!(
-                            "{}",
-                            RcDoc::group(
-                                RcDoc::text("Term:".fg(Color::Blue).to_string())
-                                    .append(RcDoc::line().append(tm.to_doc()).nest(2))
-                                    .append(RcDoc::line())
-                                    .append(RcDoc::group(RcDoc::text(format!(
-                                        "{} {}",
-                                        "has size:".fg(Color::Blue),
-                                        tmn.size()
-                                    ))))
-                            )
-                            .pretty(80)
-                        );
-                    };
-                }
-                match local {
-                    Either::Left(local) => {
-                        get_size!(local);
-                    }
-                    Either::Right(local) => {
-                        get_size!(local);
-                    }
-                }
+                println!("{} {} {tm}", "[=^.^=]".fg(Color::Green), "Normalising".fg(Color::Green));
+                        let local = ctx.check(env)?;
+                        macro_rules! get_size {
+                            ($l:expr) => {
+                                let (tmt, _) = tm.check(env, &$l)?;
+                                let sem_ctx = $l.ctx.id_sem_ctx();
+                                let tmn = tmt.eval(&sem_ctx, env);
+                                println!(
+                                    "{}",
+                                    RcDoc::group(
+                                        RcDoc::text("Term:".fg(Color::Blue).to_string())
+                                            .append(
+                                                RcDoc::line()
+                                                    .append(
+                                                        tm.to_doc()
+                                                    )
+                                                    .nest(2)
+                                            )
+                                            .append(RcDoc::line())
+                                            .append(RcDoc::group(
+                                                RcDoc::text(format!("{} {}", "has size:".fg(Color::Blue), tmn.size()))
+                                            ))
+                                    )
+                                    .pretty(80)
+                                );
+                            };
+                        }
+                        match local {
+                            Either::Left(local) => {
+                                get_size!(local);
+                            }
+                            Either::Right(local) => {
+                                get_size!(local);
+                            }
+                        }
             }
             Command::AssertEq(ctx, tm1, tm2) => {
                 println!(
-                    "{} {tm1} {} {tm2}",
+                    "{} {} {tm1} {} {tm2}", "[=^.^=]".fg(Color::Green),
                     "Checking".fg(Color::Green),
                     "=".fg(Color::Blue)
                 );
@@ -406,52 +424,94 @@ impl Command {
                 } else {
                     filename
                 };
-                println!("{} {}", "Importing".fg(Color::Green), import_file.display());
-                let src = std::fs::read_to_string(&import_file)
-                    .map_err(|_| CattError::FileError(import_file.clone(), sp))?;
-
-                let parsed = comment()
-                    .ignore_then(command().separated_by(comment()))
-                    .then_ignore(comment().ignore_then(end()))
-                    .parse(src.trim())
-                    .map_err(|err| {
-                        CattError::Report(
-                            err.into_iter()
-                                .map(|e| {
-                                    Report::build(
-                                        ReportKind::Error,
-                                        Src::File(import_file.clone()),
-                                        e.span().start,
-                                    )
-                                    .with_message(e.to_string())
-                                    .with_label(
-                                        ariadne::Label::new((
-                                            Src::File(import_file.clone()),
-                                            e.span(),
-                                        ))
-                                        .with_message(format!("{:?}", e.reason()))
-                                        .with_color(Color::Red),
-                                    )
-                                    .finish()
-                                })
-                                .collect(),
-                        )
-                    })?;
-
-                for cmd in parsed {
-                    match cmd.run(env, Some(&import_file)) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            return Err(CattError::Report(e.to_report(&Src::File(import_file))));
+                        println!("{} {} {}", "[=^.^=]".fg(Color::Green), "Importing".fg(Color::Green), import_file.display());
+                        let src = std::fs::read_to_string(&import_file)
+                            .map_err(|_| CattError::FileError(import_file.clone(), sp))?;
+        
+                        let parsed = comment()
+                            .ignore_then(command().separated_by(comment()))
+                            .then_ignore(comment().ignore_then(end()))
+                            .parse(src.trim())
+                            .map_err(|err| {
+                                CattError::Report(
+                                    err.into_iter()
+                                        .map(|e| {
+                                            Report::build(
+                                                ReportKind::Error,
+                                                Src::File(import_file.clone()),
+                                                e.span().start,
+                                            )
+                                            .with_message(e.to_string())
+                                            .with_label(
+                                                ariadne::Label::new((
+                                                    Src::File(import_file.clone()),
+                                                    e.span(),
+                                                ))
+                                                .with_message(format!("{:?}", e.reason()))
+                                                .with_color(Color::Red),
+                                            )
+                                            .finish()
+                                        })
+                                        .collect(),
+                                )
+                            })?;
+        
+                        for cmd in parsed {
+                            match cmd.run(env, Some(&import_file)) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    return Err(CattError::Report(e.to_report(&Src::File(import_file))));
+                                }
+                            }
                         }
+                        println!("----------------------------------------");
+                        println!(
+                            "{} {}",
+                            "Finished importing".fg(Color::Green),
+                            import_file.display()
+                        );
+            }
+            Command::UcTerm(ctx, tm) => {
+                println!("{} {} {tm}", "[=^.^=]".fg(Color::Green), "Computing universal cover of".fg(Color::Green));
+                let local = ctx.check(env)?;
+                macro_rules! uc_term {
+                    ($l:expr) => {
+                        let (tmt, tyt) = tm.check(env, &$l)?;
+                        let sem_ctx = $l.ctx.id_sem_ctx();
+                        let tmn = tmt.eval(&sem_ctx, env);
+                        let tyn = tyt.eval(&sem_ctx, env);
+                        let d = tyn.dim();
+                        if d != 1 {
+                            let span = tm.span().start..tm.span().end();
+                            return Err(CattError::Cover(d, span));
+                        }
+                        let cover = tmn.uc_term();
+                        // let expression = cover.eval(&tmn.uc_ctx(), env).quote().to_expr(None, env.implicits);
+                        let expression = cover.to_expr(None, env.implicits);
+                        println!(
+                            "{}",
+                            RcDoc::group(
+                                RcDoc::text("Universal cover:".fg(Color::Blue).to_string())
+                                    .append(
+                                        RcDoc::line()
+                                            .append(
+                                                expression.to_doc()
+                                            )
+                                            .nest(2)
+                                    )
+                            )
+                            .pretty(80)
+                        );
+                    };
+                }
+                match local {
+                    Either::Left(local) => {
+                        uc_term!(local);
+                    }
+                    Either::Right(local) => {
+                        uc_term!(local);
                     }
                 }
-                println!("----------------------------------------");
-                println!(
-                    "{} {}",
-                    "Finished importing".fg(Color::Green),
-                    import_file.display()
-                );
             }
         }
         Ok(())
