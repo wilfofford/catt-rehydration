@@ -13,7 +13,7 @@ use pretty::RcDoc;
 use thiserror::Error;
 
 use crate::{
-    common::{CtxT, Environment, InferRes, Name, ToDoc},
+    common::{CtxT, Environment, InferRes, Name, ToDoc, NoDispOption, Position},
     parsing::{comment, ctx, ident, term, ty},
     syntax::{CtxE, TermE, TypeE},
     typecheck::TypeCheckError,
@@ -43,6 +43,8 @@ where
 {
     #[error(transparent)]
     TypeCheckError(#[from] TypeCheckError<Range<usize>>),
+    #[error(transparent)]
+    CoverCheckError(#[from] TypeCheckError<()>),
     #[error("Cannot find file: \"{}\"", .0.to_string_lossy().to_string())]
     FileError(PathBuf, Range<usize>),
     #[error("Other report")]
@@ -58,6 +60,12 @@ impl<Id: Debug + Hash + PartialEq + Eq + Clone> CattError<Id> {
         let message = self.to_string();
         match self {
             CattError::TypeCheckError(e) => vec![e.into_report(src)],
+            CattError::CoverCheckError(_) => {
+                let report = Report::build(ReportKind::Error, src.clone(), 0)
+                    .with_message("Cannot typecheck universal cover")
+                    .finish();
+                vec![report]
+            }
             CattError::FileError(_, sp) => {
                 let report = Report::build(ReportKind::Error, src.clone(), sp.start())
                     .with_message(message)
@@ -166,6 +174,10 @@ pub fn command() -> impl Parser<char, Command, Error = Simple<char>> {
                     Command::Import(pb, sp)
                 }),
         ))
+        .or(just("uc_term ")
+            .ignore_then(ctx().padded_by(comment()))
+            .then(just("|").ignore_then(term().padded_by(comment())))
+            .map(|(ctx, tm)| Command::UcTerm(ctx, tm)))
 }
 
 impl Command {
@@ -466,7 +478,7 @@ impl Command {
                         }
                         println!("----------------------------------------");
                         println!(
-                            "{} {}",
+                            "{} {} {}", "[=^.^=]".fg(Color::Green),
                             "Finished importing".fg(Color::Green),
                             import_file.display()
                         );
@@ -486,8 +498,15 @@ impl Command {
                             return Err(CattError::Cover(d, span));
                         }
                         let cover = tmn.uc_term();
-                        // let expression = cover.eval(&tmn.uc_ctx(), env).quote().to_expr(None, env.implicits);
-                        let expression = cover.to_expr(None, env.implicits);
+                        let uc_ctx = tmn.uc_ctx();
+                        let normalisedexpression = cover.eval(&tmn.uc_ctx(), env)
+                                           .quote()
+                                           .to_expr(None,env.implicits);
+                        let (checkedterm,_) = normalisedexpression.check(env, 
+                                                              &uc_ctx.map
+                                                              .path_tree()
+                                                              .map(&|p| NoDispOption(Some(p.to_name())))
+                                                              .to_map())?;                            
                         println!(
                             "{}",
                             RcDoc::group(
@@ -495,7 +514,7 @@ impl Command {
                                     .append(
                                         RcDoc::line()
                                             .append(
-                                                expression.to_doc()
+                                                checkedterm.to_expr(None,env.implicits).to_doc()
                                             )
                                             .nest(2)
                                     )

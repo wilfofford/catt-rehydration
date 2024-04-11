@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use crate::{
     common::{
-        Container, Environment, Eval, Insertion, Level, Name, NoDispOption, Path, Position, Tree,
+        Container, Environment, Eval, Insertion, Level, Name, NoDispOption, Path, Position, Tree
     },
     normal::{HeadN, TermN, TypeN, TypeNRef},
     term::{ArgsT, ArgsWithTypeT, TermT, TypeT},
@@ -12,8 +12,8 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct SemCtx<S: Position, T: Clone> {
-    pub(crate) map: S::Container<TermN<T>>,
-    pub(crate) ty: TypeN<T>,
+    pub map: S::Container<TermN<T>>,
+    pub ty: TypeN<T>,
 }
 
 impl<S: Position, T: Clone> SemCtx<S, T> {

@@ -137,7 +137,7 @@ impl<T> Tree<T> {
 
     pub(crate) fn get_maximal_elements(&self) -> Vec<&T> {
         if self.branches.is_empty() {
-            vec![self.elements.last().unwrap().clone()]
+            vec![self.elements.last().unwrap()]
         } else {
             self.branches
                 .iter()
@@ -352,8 +352,8 @@ pub trait CtxT<P: Position> {
 pub trait Position: Clone + PartialEq + Eq {
     type Container<T: Clone>: Container<Self, T> + Clone;
     type Ctx: CtxT<Self> + Clone;
-
     fn to_name(&self) -> Name;
+    fn type_in(&self, ctx : &<Self as Position>::Ctx) -> TypeT<Self>;
 }
 
 pub trait Eval: Position {
@@ -419,6 +419,10 @@ impl Position for Level {
     fn to_name(&self) -> Name {
         Name(format!("l{}", self))
     }
+
+    fn type_in(&self, ctx : &<Level as Position>::Ctx) -> TypeT<Level> {
+        ctx[*self].1.clone()
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -477,6 +481,10 @@ impl Position for Path {
     fn to_name(&self) -> Name {
         Name(format!("p{}", self))
     }
+
+    fn type_in(&self, _ctx : &<Path as Position>::Ctx) -> TypeT<Path> {
+        self.to_type()
+    } 
 }
 
 impl Display for Path {
